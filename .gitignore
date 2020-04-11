@@ -1,2 +1,7 @@
 # Project exclude paths
 /venv/
+/damping.py
+/Simulation.py
+/response_optimization.py
+/Matrix.xlsx
+/Tester_MDOF.py

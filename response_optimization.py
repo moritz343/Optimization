@@ -19,6 +19,14 @@ class OptimizationInput:
         self.spectrum = Spectrum
         self.omega_range = omega_range
 
+    def rayleigh(self, f1, f2, zeta):
+        """Construction of Rayleigh damping matrix."""
+        omega1 = f1 * 2 * np.pi
+        omega2 = f2 * 2 * np.pi
+        alpha = zeta * 2 * omega1 * omega2 / (omega1 + omega2)
+        beta = self.zeta * 2 / (omega1 * omega2)
+        self.C = alpha * self.M + beta * self.K
+
     def incrementK(self, step_size, dof1, dof2):
         """This function increments the stiffness matrix for a spring that acts between dof1 and dof2.
         The step_size controls the amount of stiffness that is added to the spring.
@@ -43,7 +51,7 @@ class OptimizationInput:
         the identity vector) and multiplies it with the spectrum defined by the user (self.spectrum)."""
         H = []
         for i in range(len(self.omega_range)):
-            """Caclulation of the Transmission matrix H"""
+            """Calculation of the Transmission matrix H"""
             H.append(np.linalg.inv((-self.omega_range[i] ** 2 * self.M
                                     - 1j * self.omega_range[i] * self.C
                                     + self.K)))
@@ -61,8 +69,7 @@ class OptimizationInput:
         """First, the initial variance of the system is computed for the matrices given by the user"""
         Variance = []
         """The sign variable keeps track of the direction the algorithm is stepping"""
-        sign = []
-        sign.append(0)
+        sign = [0]
         Variance.append(self.VarianceOfResponse())
 
         """The matrix K is incremented by one step with size = step_size. for the spring that connects dof1 and dof2"""
@@ -87,7 +94,7 @@ class OptimizationInput:
         return Variance
 
     def optimizationC(self, step_size, dof1, dof2, controlDOF):
-        """Same as for the stiffness matrix"""
+        """Same as for the stiffness matrix K"""
         Variance = []
         sign = []
         sign.append(0)
