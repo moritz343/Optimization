@@ -2,95 +2,94 @@ import numpy as np
 import structural_dynamics as dyn
 import matplotlib.pyplot as plt
 
-"""Parameters"""
-m = 50000.
-m2 = 5000.
-m3 = 000.1
+"""System Parameters"""
+m1 = 58836.
+m2 = 267907.
+mi = 451666.
+mc = 85773.
 
-E = 210000. # Elastic modulus Steel N/mm^2
-I = 251700000. # Second moment of inertia HEB 300 cm^4
-h = 3. # height of 1 floor m
-n = 8. # number of columns #
+k1 = 850180000.
+k2 = (1*2*np.pi)**2 * m2
+ki = 835180000.
+kc = 386480.
 
-k = 12 * E * I * 10000 * n / (h * 1000)**3 / 1000
-k2 = m2 * (10 * 2 * np.pi)**2
-k3 = m3 * (1 * 2 * np.pi)**2
+c1 = 2 * 0.05 * np.sqrt(m1 * k1)
+c2 = 2 * 0.17 * np.sqrt(m2 * k2)
+ci = 1942230.
+cc = 1821.
+
+M = np.array([
+    [m1, 0, 0, 0],
+    [0, m2, 0, 0],
+    [0, 0, mi, 0],
+    [0, 0, 0, mc]
+])
+
+K = np.array([
+    [k1 + k2 + ki + kc,     -k2,       -ki,   -kc],
+    [-k2,                    k2,         0,     0],
+    [-ki,                     0,        ki,     0],
+    [-kc,                     0,         0,    kc]
+])
+
+C = np.array([
+    [c1 + c2 + ci + cc,     -c2,       -ci,   -cc],
+    [-c2,                    c2,         0,     0],
+    [-ci,                     0,        ci,     0],
+    [-cc,                     0,         0,    cc]
+])
+
+coords = [[0, 3], [0, 1.5], [0, 6], [1, 9]]
+size = [[1, 0.2], [0.5, 0.2], [0.3, 0.3], [0.2, 0.2]]
 
 """Spectrum"""
 spec_import = np.genfromtxt('spectrum.txt')
 wrange_import = np.genfromtxt('FreqRange.txt')
 
-EQ = 121
 DT = np.genfromtxt('./Earthquakes/DT.txt')
-gm = dyn.Earthquake(np.genfromtxt('./Earthquakes/' + str(EQ) + '.txt'), DT[EQ - 1])
-
-# gm1.plot_signal()
-# gm1.plot_fourier_amplitude()
-# gm1.plot_fourier_phase()
+# gm = dyn.Earthquake(np.genfromtxt('./Earthquakes/' + str(EQ) + '.txt'), DT[EQ - 1])
 
 
-M = np.array([
-    [m, 0, 0, 0, 0,  0, 0],
-    [0, m, 0, 0, 0,  0, 0],
-    [0, 0, m, 0, 0,  0, 0],
-    [0, 0, 0, m, 0,  0, 0],
-    [0, 0, 0, 0, m,  0, 0],
-    [0, 0, 0, 0, 0, m2, 0],
-    [0, 0, 0, 0, 0,  0, m3]
-])
+metafoundation = dyn.Structure(M, K, C, coordinates=coords, size=size, omega_range=wrange_import, spectrum=spec_import)
 
-K = np.array([
-    [k+k, -k,      0,   0,      0,   0,   0],
-    [-k, k+k,     -k,   0,      0,   0,   0],
-    [0,   -k, k+k+k3,  -k,      0,   0, -k3],
-    [0,    0,     -k, k+k,     -k,   0,   0],
-    [0,    0,      0,  -k,   k+k2, -k2,   0],
-    [0,    0,      0,   0,    -k2,  k2,   0],
-    [0,    0,    -k3,   0,      0,   0,  k3]
-])
+nEQ = 20
 
-coords = [[0, 3], [0, 6], [0, 9], [0, 12], [0, 15], [1.5, 15], [1.5, 9]]
-size = [[1, 0.2], [1, 0.2], [1, 0.2], [1, 0.2], [1, 0.2], [0.3, 0.2], [0.3, 0.2]]
+maxbs = []
+for EQ in range(nEQ):
+    gm = np.genfromtxt('./Earthquakes/' + str(EQ+1) + '.txt')
+    metafoundation.newmark(gm, DT[EQ])
+    base_shear = ((np.asarray(metafoundation.displacement[2]) - np.asarray(metafoundation.displacement[0])) * ki)
+    maxbs.append(max(base_shear))
+    print(str(EQ) + ' of ' + str(nEQ))
 
-building = dyn.OptimalStructure(M, K, coordinates=coords, size=size, omega_range=wrange_import, spectrum=spec_import)
-building.rayleigh(1, 5, 0.03)
-C = building.C
+total_bs = np.sum(maxbs)
 
-# building.show_geometry()
-building.newmark(gm.signal, gm.dt)
-# building.time_history_animation(frame_step=10, magnification=40)
-plt.figure()
-plt.plot(building.time, building.displacement[0])
-plt.show()
+step_size_C = 2 * np.sqrt(k2 * m2) / 1000
+df = 0.5
+step_size_K = (df * 2 * np.pi)**2 * m2
+# step_size_K = k2/100
+metafoundation.optimization_abs_acc_K(step_size=step_size_K, dof1=2, dof2=1, controlDOF=3)
+print('Stiffness done')
+metafoundation.optimization_abs_acc_C(step_size=step_size_C, dof1=2, dof2=1, controlDOF=3)
+print('Damping done')
 
-step_size_C = 2 * 0.05 * np.sqrt(k2 * m2) / 10
-step_size_K = k2/10
-building.optimizationC(step_size=step_size_C, dof1=5, dof2=6, controlDOF=5)
-building.optimizationK(step_size=step_size_K, dof1=5, dof2=6, controlDOF=5)
+maxbs2 = []
+for EQ in range(nEQ):
+    gm = np.genfromtxt('./Earthquakes/' + str(EQ + 1) + '.txt')
+    metafoundation.newmark(gm, DT[EQ])
+    base_shear2 = ((np.asarray(metafoundation.displacement[2]) - np.asarray(metafoundation.displacement[0])) * ki)
+    maxbs2.append(max(base_shear2))
+    print(str(EQ) + ' of ' + str(nEQ))
 
-building.newmark(gm.signal, gm.dt)
-# building.time_history_animation(frame_step=10, magnification=40)
-plt.figure()
-plt.plot(building.time, building.displacement[0])
-plt.show()
+total_bs2 = np.sum(maxbs2)
+print('Simulations 1 Base shear ' + str(total_bs))
+print('Simulations 2 Base shear ' + str(total_bs2))
 
-# def optimize_MTMD(self, dofs, step_size_K, step_size_C, controlDOF):
-# dofs = [[5, 6], [3, 7]]
-# step_size_C = 2 * 0.05 * np.sqrt(k2 * m2) / 10
-# step_size_K = k2/10
-# Variance_tot = []
-# for tmd in dofs:
-#     building.optimizationC(step_size=step_size_C, dof1=tmd[0], dof2=tmd[1], controlDOF=5)
-#     building.optimizationK(step_size=step_size_K, dof1=tmd[0], dof2=tmd[1], controlDOF=5)
-#
+k_opt = metafoundation.K[0, 1]
+f_opt = np.sqrt(abs(k_opt)/m2)/2/np.pi
 
+c_opt = abs(metafoundation.C[0, 1])
+zeta_opt = c_opt/(2*np.sqrt(m2 * k2))
 
-#
-# structure.optimizationK(step_size=.1, dof1=2, dof2=3, controlDOF=2)
-# print(structure.K)
-#
-# structure.optimizationC(step_size=1., dof1=2, dof2=3, controlDOF=2)
-# print(structure.C)
-#
-# structure.optimizationK(step_size=.1, dof1=2, dof2=3, controlDOF=2)
-# print(structure.K)
+print('Optimal Frequency = ' + str(f_opt) + ' Hz')
+print('Optimal Damping = ' + str(zeta_opt))

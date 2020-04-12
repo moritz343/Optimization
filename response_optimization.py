@@ -24,7 +24,7 @@ class OptimizationInput:
         omega1 = f1 * 2 * np.pi
         omega2 = f2 * 2 * np.pi
         alpha = zeta * 2 * omega1 * omega2 / (omega1 + omega2)
-        beta = self.zeta * 2 / (omega1 * omega2)
+        beta = zeta * 2 / (omega1 * omega2)
         self.C = alpha * self.M + beta * self.K
 
     def incrementK(self, step_size, dof1, dof2):

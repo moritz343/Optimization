@@ -1,5 +1,9 @@
 import numpy as np
-
+"""This class optimizes 1D linear dynamic systems and is based off the structural dynamics class defined above.
+The class requires the mass, damping, and stiffness matrices of the classical equations of motion. The matrices
+need to be written in the direct form (the mass matrix needs to be diagonal and contain only the masses of the
+individual degrees of freedom DOFs). Besides the matrices, also the power spectral density PSD function of the
+ground motion and its corresponding frequency range need to be provided to the class."""
 
 class Structure:
 
@@ -132,19 +136,6 @@ class Structure:
         motion(int(len(self.displacement) / frame_step))
         plt.show()
 
-
-class OptimalStructure(Structure):
-    """This class optimizes 1D linear dynamic systems and is based off the structural dynamics class defined above.
-    The class requires the mass, damping, and stiffness matrices of the classical equations of motion. The matrices
-    need to be written in the direct form (the mass matrix needs to be diagonal and contain only the masses of the
-    individual degrees of freedom DOFs). Besides the matrices, also the power spectral density PSD function of the
-    ground motion and its corresponding frequency range need to be provided to the class."""
-    def __init__(self, mass, stiffness, damping=None, coordinates=None, size=None, omega_range=None, spectrum=None):
-        """Take over all attributes of Structure class"""
-        super().__init__(mass, stiffness, damping, coordinates, size, omega_range, spectrum)
-        self.spectrum = spectrum
-        self.omega_range = omega_range
-
     def incrementK(self, step_size, dof1, dof2):
         """This function increments the stiffness matrix for a spring that acts between dof1 and dof2.
         The step_size controls the amount of stiffness that is added to the spring.
@@ -174,15 +165,16 @@ class OptimalStructure(Structure):
                                     - 1j * self.omega_range[i] * self.C
                                     + self.K)))
         """squared absolute of the transmission matrix H multiplied with the diagonal of the mass matrix M (M*I)"""
-        HabsVec = [(np.abs(matrix)**2).dot(np.transpose(np.diagonal(self.M))) for matrix in H]
+        Habs2 = [(np.abs(matrix)**2) for matrix in H]
+        PSDexc = [np.transpose(np.diagonal(self.M)) * spec_val for spec_val in self.spectrum]
         """Response of all DOFs as PSD"""
-        RespPSD = [HabsVec[wincr] * self.spectrum[wincr] for wincr in range(len(self.spectrum))]
+        RespPSD = [Habs2[wincr].dot(PSDexc[wincr]) for wincr in range(len(self.spectrum))]
         """The variance of the response can be obtained with the integral of the response PSD. 
         integral(PSD_response)"""
         variance = (np.trapz(RespPSD, self.omega_range, axis=0))
         return variance
 
-    def optimizationK(self, step_size, dof1, dof2, controlDOF):
+    def optimization_rel_disp_K(self, step_size, dof1, dof2, controlDOF):
         """Optimization of the system by minimizing the variance"""
         """First, the initial variance of the system is computed for the matrices given by the user"""
         Variance = []
@@ -196,22 +188,27 @@ class OptimalStructure(Structure):
         Variance.append(self.VarianceOfResponse())
 
         """Loop that iteratively steps down the optimal direction of increasing or reducing K"""
-        while len(sign) < 4 or np.sum(sign[-4:]) != 0:
+        i = 0
+        while len(sign) < 4 or np.sum(sign[-4:]) != 0 or i < 100:
+            i += 1
+            print(abs(Variance[-2][int(controlDOF[0] - 1)] - Variance[-2][int(controlDOF[1] - 1)]))
             """First condition demands a minimum of 4 steps. Second condition sums up the direction of the last 4 steps
             if the sum equals 0, the minimum value for the variance has been found."""
-            if Variance[-2][int(controlDOF - 1)] > Variance[-1][int(controlDOF - 1)]:
+            if abs(Variance[-2][int(controlDOF[0] - 1)] - Variance[-2][int(controlDOF[1] - 1)]) \
+                    > abs(Variance[-1][int(controlDOF[0] - 1)] - Variance[-1][int(controlDOF[1] - 1)]):
                 """If the last variance is smaller than the variance before, keep going in that direction."""
                 self.incrementK(step_size * sign[-1], dof1, dof2)
                 Variance.append(self.VarianceOfResponse())
                 sign.append(sign[-1])
-            elif Variance[-2][int(controlDOF - 1)] < Variance[-1][int(controlDOF - 1)]:
+            elif abs(Variance[-2][int(controlDOF[0] - 1)] - Variance[-2][int(controlDOF[1] - 1)]) \
+                    < abs(Variance[-1][int(controlDOF[0] - 1)] - Variance[-1][int(controlDOF[1] - 1)]):
                 """If the last variance is bigger than the one before, turn around and go the other way."""
                 self.incrementK(step_size * sign[-1] * -1, dof1, dof2)
                 Variance.append(self.VarianceOfResponse())
                 sign.append(sign[-1] * -1)
         return Variance
 
-    def optimizationC(self, step_size, dof1, dof2, controlDOF):
+    def optimization_rel_disp_C(self, step_size, dof1, dof2, controlDOF):
         """Same as for the stiffness matrix K"""
         Variance = []
         sign = []
@@ -222,17 +219,106 @@ class OptimalStructure(Structure):
         self.incrementC(step_size, dof1, dof2)
         Variance.append(self.VarianceOfResponse())
 
-        while len(sign) < 4 or np.sum(sign[-4:]) != 0:
-            if Variance[-2][int(controlDOF - 1)] > Variance[-1][int(controlDOF - 1)]:
+        i = 0
+        while len(sign) < 4 or np.sum(sign[-4:]) != 0 or i < 100:
+            i += 1
+            if abs(Variance[-2][int(controlDOF[0] - 1)] - Variance[-2][int(controlDOF[1] - 1)]) \
+                    > abs(Variance[-1][int(controlDOF[0] - 1)] - Variance[-1][int(controlDOF[1] - 1)]):
                 self.incrementC(step_size * sign[-1], dof1, dof2)
                 Variance.append(self.VarianceOfResponse())
                 sign.append(sign[-1])
-            elif Variance[-2][int(controlDOF - 1)] < Variance[-1][int(controlDOF - 1)]:
+            elif abs(Variance[-2][int(controlDOF[0] - 1)] - Variance[-2][int(controlDOF[1] - 1)]) \
+                    < abs(Variance[-1][int(controlDOF[0] - 1)] - Variance[-1][int(controlDOF[1] - 1)]):
                 self.incrementC(step_size * sign[-1] * -1, dof1, dof2)
                 Variance.append(self.VarianceOfResponse())
                 sign.append(sign[-1] * -1)
         return Variance
 
+    def VarianceOfAbsAcceleration(self):
+        """This functions calculates the variance of the response for all DOFs. It uses the matrices of the system,
+        computes the transmission matrix H, and integrates it together with the PSD of the spectrum.
+        In principle, the the PSD of the response can be calculated with PSD_reponse = abs(H)^2 * PSD_spectrum.
+        Here the PSD_spectrum represents a vector that contains the diagonal of the mass matrix (or M*I, with I being
+        the identity vector) and multiplies it with the spectrum defined by the user (self.spectrum)."""
+        H = []
+        for i in range(len(self.omega_range)):
+            """Calculation of the Transmission matrix H"""
+            H.append(np.linalg.inv((-self.omega_range[i] ** 2 * self.M
+                                    - 1j * self.omega_range[i] * self.C
+                                    + self.K)))
+        """squared absolute of the transmission matrix H multiplied with the diagonal of the mass matrix M (M*I)"""
+        FRFacc = [H[wincr].dot(np.diagonal(self.M)) * self.omega_range[wincr]**2 for wincr in range(len(self.spectrum))]
+        Habs2 = [(np.abs(vector)**2) for vector in FRFacc]
+        PSDexc = self.spectrum
+        """Response of all DOFs as PSD"""
+        RespPSD = [Habs2[wincr] * PSDexc[wincr] for wincr in range(len(self.spectrum))]
+        AccPSD = [abs(RespPSD[wincr] + 0* PSDexc[wincr]) for wincr in range(len(self.spectrum))]
+        """The variance of the response can be obtained with the integral of the response PSD. 
+        integral(PSD_response)"""
+        variance = (np.trapz(AccPSD, self.omega_range, axis=0))
+        return variance
+
+    def optimization_abs_acc_K(self, step_size, dof1, dof2, controlDOF):
+        """Optimization of the system by minimizing the variance"""
+        """First, the initial variance of the system is computed for the matrices given by the user"""
+        Variance = []
+        """The sign variable keeps track of the direction the algorithm is stepping"""
+        sign = [0]
+        Variance.append(self.VarianceOfAbsAcceleration())
+
+        """The matrix K is incremented by one step with size = step_size. for the spring that connects dof1 and dof2"""
+        sign.append(1)
+        self.incrementK(step_size, dof1, dof2)
+        Variance.append(self.VarianceOfAbsAcceleration())
+
+        """Loop that iteratively steps down the optimal direction of increasing or reducing K"""
+        i = 0
+        while len(sign) < 4 or np.sum(sign[-8:]) != 0:
+            i += 1
+            if i == 400:
+                break
+            print(Variance[-2][int(controlDOF - 1)])
+            """First condition demands a minimum of 4 steps. Second condition sums up the direction of the last 4 steps
+            if the sum equals 0, the minimum value for the variance has been found."""
+            if Variance[-2][int(controlDOF - 1)] > Variance[-1][int(controlDOF - 1)]:
+                """If the last variance is smaller than the variance before, keep going in that direction."""
+                self.incrementK(step_size * sign[-1], dof1, dof2)
+                Variance.append(self.VarianceOfAbsAcceleration())
+                sign.append(sign[-1])
+            elif Variance[-2][int(controlDOF - 1)] < Variance[-1][int(controlDOF - 1)]:
+                """If the last variance is bigger than the one before, turn around and go the other way."""
+                self.incrementK(step_size * sign[-1] * -1, dof1, dof2)
+                Variance.append(self.VarianceOfAbsAcceleration())
+                sign.append(sign[-1] * -1)
+        return Variance
+
+    def optimization_abs_acc_C(self, step_size, dof1, dof2, controlDOF):
+        """Same as for the stiffness matrix K"""
+        Variance = []
+        sign = []
+        sign.append(0)
+        Variance.append(self.VarianceOfAbsAcceleration())
+
+        sign.append(1)
+        self.incrementC(step_size, dof1, dof2)
+        Variance.append(self.VarianceOfAbsAcceleration())
+
+        i = 0
+        while len(sign) < 4 or np.sum(sign[-8:]) != 0:
+            i += 1
+            if i == 400:
+                break
+            print(Variance[-2][int(controlDOF - 1)])
+
+            if Variance[-2][int(controlDOF - 1)] > Variance[-1][int(controlDOF - 1)]:
+                self.incrementC(step_size * sign[-1], dof1, dof2)
+                Variance.append(self.VarianceOfAbsAcceleration())
+                sign.append(sign[-1])
+            elif Variance[-2][int(controlDOF - 1)] < Variance[-1][int(controlDOF - 1)]:
+                self.incrementC(step_size * sign[-1] * -1, dof1, dof2)
+                Variance.append(self.VarianceOfAbsAcceleration())
+                sign.append(sign[-1] * -1)
+        return Variance
 
 class Earthquake:
 
