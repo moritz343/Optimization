@@ -1,13 +1,16 @@
 import numpy as np
+
 """This class optimizes 1D linear dynamic systems and is based off the structural dynamics class defined above.
 The class requires the mass, damping, and stiffness matrices of the classical equations of motion. The matrices
 need to be written in the direct form (the mass matrix needs to be diagonal and contain only the masses of the
 individual degrees of freedom DOFs). Besides the matrices, also the power spectral density PSD function of the
 ground motion and its corresponding frequency range need to be provided to the class."""
 
+
 class Structure:
 
-    def __init__(self, mass, stiffness, damping=None, coordinates=None, size=None, omega_range=None, spectrum=None):
+    def __init__(self, mass, stiffness, damping=None, coordinates=None, size=None,
+                 omega_range=np.arange(0.5, 150, 0.5), spectrum=np.ones(len(np.arange(0.5, 150, 0.5)))):
         self.M = mass
         self.K = stiffness
         if damping is None:
@@ -109,6 +112,7 @@ class Structure:
                                            self.size[i][0], self.size[i][1], alpha=0.5))
 
         """Init function for animation draws the frame, so that blip can be used and the animation runs faster"""
+
         def init():
             for i in range(len(self.coordinates)):
                 ax.add_patch(rectangle[i])
@@ -118,11 +122,12 @@ class Structure:
             return rectangle
 
         """Animation function: only the coordinates of the rectangles are updated here"""
+
         def motion(t_step):
             for i in range(len(self.coordinates)):
                 rectangle[i].set_xy((float(self.coordinates[i][0]
                                            + self.displacement[i][t_step * frame_step] * magnification),
-                                    float(self.coordinates[i][1])))
+                                     float(self.coordinates[i][1])))
             return rectangle
 
         """Animation function: inter gives the time delay between frames in milli seconds"""
@@ -165,7 +170,7 @@ class Structure:
                                     - 1j * self.omega_range[i] * self.C
                                     + self.K)))
         """squared absolute of the transmission matrix H multiplied with the diagonal of the mass matrix M (M*I)"""
-        Habs2 = [(np.abs(matrix)**2) for matrix in H]
+        Habs2 = [(np.abs(matrix) ** 2) for matrix in H]
         PSDexc = [np.transpose(np.diagonal(self.M)) * spec_val for spec_val in self.spectrum]
         """Response of all DOFs as PSD"""
         RespPSD = [Habs2[wincr].dot(PSDexc[wincr]) for wincr in range(len(self.spectrum))]
@@ -247,12 +252,13 @@ class Structure:
                                     - 1j * self.omega_range[i] * self.C
                                     + self.K)))
         """squared absolute of the transmission matrix H multiplied with the diagonal of the mass matrix M (M*I)"""
-        FRFacc = [H[wincr].dot(np.diagonal(self.M)) * self.omega_range[wincr]**2 for wincr in range(len(self.spectrum))]
-        Habs2 = [(np.abs(vector)**2) for vector in FRFacc]
+        FRFacc = [H[wincr].dot(np.diagonal(self.M)) * self.omega_range[wincr] ** 2 for wincr in
+                  range(len(self.spectrum))]
+        Habs2 = [(np.abs(np.ones(len(vector), dtype=float) - vector) ** 2) for vector in FRFacc]
         PSDexc = self.spectrum
         """Response of all DOFs as PSD"""
         RespPSD = [Habs2[wincr] * PSDexc[wincr] for wincr in range(len(self.spectrum))]
-        AccPSD = [abs(RespPSD[wincr] + 0* PSDexc[wincr]) for wincr in range(len(self.spectrum))]
+        AccPSD = [abs(RespPSD[wincr] + 0*PSDexc[wincr]) for wincr in range(len(self.spectrum))]
         """The variance of the response can be obtained with the integral of the response PSD. 
         integral(PSD_response)"""
         variance = (np.trapz(AccPSD, self.omega_range, axis=0))
@@ -306,7 +312,7 @@ class Structure:
         i = 0
         while len(sign) < 4 or np.sum(sign[-8:]) != 0:
             i += 1
-            if i == 400:
+            if i == 100:
                 break
             print(Variance[-2][int(controlDOF - 1)])
 
@@ -319,6 +325,7 @@ class Structure:
                 Variance.append(self.VarianceOfAbsAcceleration())
                 sign.append(sign[-1] * -1)
         return Variance
+
 
 class Earthquake:
 
@@ -337,7 +344,7 @@ class Earthquake:
         self.f_range = np.arange(0, self.fNiquist, self.d_f)
         self.omega_range = np.arange(0, self.fNiquist * 2 * np.pi, self.d_omega)
         self.fourier = np.fft.fft(self.signal)
-        self.psd = abs(self.fourier)**2
+        self.psd = abs(self.fourier) ** 2
 
     def interpolate(self, dt_new):
         new_time_range = np.arange(0, self.duration, dt_new)
@@ -404,7 +411,7 @@ class Earthquake:
 
     def response_spectrum(self, period_max=4, d_period=0.02, damping_zeta=0.05):
         self.period_range = np.arange(d_period, period_max, d_period)
-        self.omega_resp_spec = 1/self.period_range * 2 * np.pi
+        self.omega_resp_spec = 1 / self.period_range * 2 * np.pi
 
         a = np.zeros([self.omega_resp_spec.size, self.length])
         v = np.zeros([self.omega_resp_spec.size, self.length])
@@ -418,7 +425,7 @@ class Earthquake:
                 a[W, i + 1] = ((u[W, i] * self.omega_resp_spec[W] ** 2 + v[W, i]
                                 * (2 * damping_zeta * self.omega_resp_spec[W] + self.omega_resp_spec[W] ** 2 * self.dt)
                                 + a[W, i] * (damping_zeta * self.omega_resp_spec[W] * self.dt
-                                + (self.omega_resp_spec[W] ** 2) / 4 * self.dt ** 2) - self.signal[i + 1])
+                                             + (self.omega_resp_spec[W] ** 2) / 4 * self.dt ** 2) - self.signal[i + 1])
                                / (- 1 - damping_zeta * self.omega_resp_spec[W] * self.dt
                                   - ((self.omega_resp_spec[W] ** 2) * self.dt ** 2) / 4))
 
@@ -448,3 +455,26 @@ class Earthquake:
         plt.xlabel('Period [s]')
         plt.show()
         return fig_resp_spec
+
+
+class KanaiTajimi:
+
+    def __init__(self, omega_range, omega_1, zeta_1, omega_g, zeta_g, s_0=1):
+        self.omega_range = omega_range
+        self.s_0 = s_0
+        self.omega_1 = omega_1
+        self.zeta_1 = zeta_1
+        self.omega_g = omega_g
+        self.zeta_g = zeta_g
+        self.spectrum_kt = (self.omega_range ** 2 / self.omega_1 ** 2) / \
+                           ((1 - self.omega_range / self.omega_1) + 2 * 1j * self.zeta_1 * self.omega_range / self.omega_1)
+        self.spectrum_cp = (self.omega_range ** 2 / self.omega_g ** 2) / \
+                           ((1 - self.omega_range / self.omega_g) + 2 * 1j * self.zeta_g * self.omega_range / self.omega_g)
+        self.spectrum = self.s_0 * self.spectrum_kt ** 2 * self.spectrum_cp ** 2
+
+    def plot_spectrum(self):
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(self.omega_range, self.spectrum)
+        plt.xlabel('Frequency [rad/s]')
+        plt.ylabel('Power Sepctral Density [$m^2/s^2$]')
